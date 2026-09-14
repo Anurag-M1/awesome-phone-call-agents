@@ -108,6 +108,7 @@ async def create_request(payload: CreateRequestPayload, background_tasks: Backgr
         unit_number=payload.unit_number,
         property_name=payload.property_name,
         initial_description=payload.initial_description,
+        simulate_cascade=payload.simulate_cascade,
     )
     req.add_timeline_event("request_created", f"Maintenance request created for Unit {req.unit_number}")
     requests_store[req.id] = req

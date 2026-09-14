@@ -375,6 +375,7 @@ async function refreshDetail(id) {
 
 function renderDetail(req) {
     const panel = document.getElementById('detailPanel');
+    window.currentDetailCalls = req.calls || [];
 
     panel.innerHTML = `
         <div class="detail-header">
@@ -447,6 +448,7 @@ function renderDetail(req) {
                 ${req.timeline.map((evt, i) => {
                     const isLast = i === req.timeline.length - 1;
                     const cls = evt.event.includes('completed') || evt.event.includes('confirmed') ? 'done'
+                              : evt.event.includes('cascade') ? 'cascade'
                               : evt.event.includes('failed') || evt.event.includes('error') ? 'fail'
                               : isLast ? 'active' : '';
                     return `
@@ -475,7 +477,14 @@ function renderCallCard(call, index) {
     <div class="call-card" id="call-${index}">
         <div class="call-card-header" onclick="toggleCall(${index})">
             <div class="call-type-badge ${t.cls}">${t.icon} ${t.label}</div>
-            <span class="badge ${call.status === 'completed' ? 'badge-green' : 'badge-red'}">${call.status}</span>
+            <div class="call-header-right">
+                ${hasTranscript ? `
+                <button class="btn-audio" id="audio-btn-${index}" onclick="event.stopPropagation(); playCallAudio(${index}, window.currentDetailCalls[${index}])" title="Listen to AI voice conversation">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                    Listen
+                </button>` : ''}
+                <span class="badge ${call.status === 'completed' ? 'badge-green' : 'badge-red'}">${call.status}</span>
+            </div>
         </div>
         <div class="call-expand" id="callx-${index}">
             ${call.confidence_score ? confidenceRingHTML(call.confidence_score, call.confidence_label) : ''}
@@ -521,39 +530,153 @@ function toggleCall(i) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CALL AUDIO PLAYBACK (Web Speech API)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let currentSpeakingCall = null;
+let isPlayingAudio = false;
+
+function stopCallAudio() {
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+    isPlayingAudio = false;
+    currentSpeakingCall = null;
+    document.querySelectorAll('.chat-bubble').forEach(b => b.classList.remove('speaking'));
+    document.querySelectorAll('.btn-audio').forEach(b => {
+        b.classList.remove('playing');
+        b.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Listen`;
+    });
+}
+
+function playCallAudio(callIndex, callObj) {
+    if (!('speechSynthesis' in window)) {
+        showToast('Speech synthesis not supported in this browser.');
+        return;
+    }
+
+    if (isPlayingAudio && currentSpeakingCall === callIndex) {
+        stopCallAudio();
+        return;
+    }
+
+    stopCallAudio();
+
+    if (!callObj || !callObj.transcript || callObj.transcript.length === 0) {
+        showToast('No transcript turns to play.');
+        return;
+    }
+
+    const card = document.getElementById(`call-${callIndex}`);
+    if (card && !card.classList.contains('expanded')) {
+        card.classList.add('expanded');
+    }
+
+    isPlayingAudio = true;
+    currentSpeakingCall = callIndex;
+
+    const btn = document.getElementById(`audio-btn-${callIndex}`);
+    if (btn) {
+        btn.classList.add('playing');
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop`;
+    }
+
+    const bubbles = document.querySelectorAll(`#call-${callIndex} .chat-bubble`);
+    let turnIndex = 0;
+
+    function speakNext() {
+        if (!isPlayingAudio || turnIndex >= callObj.transcript.length) {
+            stopCallAudio();
+            return;
+        }
+
+        const turn = callObj.transcript[turnIndex];
+        const currentBubble = bubbles[turnIndex];
+
+        bubbles.forEach(b => b.classList.remove('speaking'));
+        if (currentBubble) {
+            currentBubble.classList.add('speaking');
+            currentBubble.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        const utterance = new SpeechSynthesisUtterance(turn.text);
+        utterance.rate = 1.05;
+
+        if (turn.speaker === 'bot') {
+            utterance.pitch = 1.15; // Crisp AI assistant tone
+        } else {
+            utterance.pitch = 0.92; // Natural caller tone
+        }
+
+        utterance.onend = () => {
+            turnIndex++;
+            speakNext();
+        };
+
+        utterance.onerror = (e) => {
+            console.warn('TTS playback error:', e);
+            turnIndex++;
+            speakNext();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    speakNext();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AUTO-DEMO
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function runAutoDemo() {
-    const btn = document.getElementById('btnDemo');
-    btn.disabled = true;
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Running...`;
+async function runAutoDemo(cascade = false) {
+    const btn = cascade ? document.getElementById('btnCascadeDemo') : document.getElementById('btnDemo');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Running...`;
+    }
 
-    showToast('🚀 Starting AI demo workflow...');
+    if (cascade) {
+        showToast('⚡ Running Cascade Fallback: Primary contractor unavailable ➔ Cascading to backup!');
+    } else {
+        showToast('🚀 Starting AI demo workflow...');
+    }
 
     try {
+        const payload = {
+            tenant_name: cascade ? 'Marcus Vance' : 'Sarah Chen',
+            tenant_phone: '+15551234567',
+            unit_number: cascade ? '12C' : '4B',
+            property_name: 'SmartRent Demo Property',
+            initial_description: cascade
+                ? 'High-priority electrical hazard: circuit breaker keeps tripping with burning odor'
+                : 'Kitchen sink is leaking under the cabinet, water pooling on floor',
+            simulate_cascade: cascade,
+        };
+
         const res = await fetch(`${API}/api/requests`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tenant_name: 'Sarah Chen',
-                tenant_phone: '+15551234567',
-                unit_number: '4B',
-                property_name: 'SmartRent Demo Property',
-                initial_description: 'Kitchen sink is leaking under the cabinet, water pooling on floor',
-            }),
+            body: JSON.stringify(payload),
         });
         const req = await res.json();
         selectedId = req.id;
         await refresh();
-        showToast(`✅ Demo started — Watch the pipeline animate!`);
+        showToast(cascade
+            ? `⚡ Cascade workflow active (${req.id}) — Watch Contractor fallback in real-time!`
+            : `✅ Demo started — Watch the pipeline animate!`
+        );
     } catch (e) {
         showToast(`❌ Demo failed: ${e.message}`);
     } finally {
         setTimeout(() => {
-            btn.disabled = false;
-            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Run Demo`;
-        }, 5000);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = cascade
+                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Cascade Fallback Demo`
+                    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Standard Demo`;
+            }
+        }, 4000);
     }
 }
 
@@ -576,12 +699,16 @@ async function submitNewRequest(event) {
     const btn = document.getElementById('btnSubmit');
     btn.disabled = true;
 
+    const cascadeEl = document.getElementById('simulateCascade');
+    const simulateCascade = cascadeEl ? cascadeEl.checked : false;
+
     const payload = {
         tenant_name: document.getElementById('tenantName').value,
         tenant_phone: document.getElementById('tenantPhone').value,
         unit_number: document.getElementById('unitNumber').value,
         property_name: document.getElementById('propertyName').value || 'SmartRent Demo Property',
         initial_description: document.getElementById('initialDescription').value,
+        simulate_cascade: simulateCascade,
     };
 
     try {

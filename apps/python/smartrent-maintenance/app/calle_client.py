@@ -101,6 +101,38 @@ DRY_RUN_VENDOR_RESULT = {
     }]
 }
 
+DRY_RUN_VENDOR_UNAVAILABLE_RESULT = {
+    "status": "completed",
+    "task_completed": True,
+    "completion_confidence": {"score": 0.94, "label": "high"},
+    "evidence": [
+        "The vendor stated they are completely booked on an emergency job today.",
+        "Earliest available opening is tomorrow afternoon.",
+    ],
+    "structured_result": {
+        "available": "no",
+        "eta": "tomorrow afternoon",
+        "cost_estimate": "N/A",
+        "notes": "Fully booked on emergency main line repairs today. Suggested calling another contractor."
+    },
+    "recipients": [{
+        "structured_result": {
+            "available": "no",
+            "eta": "tomorrow afternoon",
+            "cost_estimate": "N/A",
+            "notes": "Fully booked today"
+        },
+        "attempts": [{
+            "transcript_turns": [
+                {"offset_seconds": 0, "speaker": "bot", "text": "Hi, this is SmartRent Maintenance calling on behalf of SmartRent Demo Property. We have an urgent repair in Unit 4B. Are you available for a dispatch today?"},
+                {"offset_seconds": 7, "speaker": "user", "text": "I'm sorry, all our crew is tied up on an emergency commercial water main replacement until tomorrow."},
+                {"offset_seconds": 15, "speaker": "bot", "text": "Understood. Thanks for checking your availability so quickly. Have a great day."},
+                {"offset_seconds": 19, "speaker": "user", "text": "Thanks, good luck with the repair."},
+            ]
+        }]
+    }]
+}
+
 DRY_RUN_CONFIRM_RESULT = {
     "status": "completed",
     "task_completed": True,
@@ -266,6 +298,7 @@ class CalleService:
         property_name: str,
         unit_number: str,
         additional_details: str = "",
+        simulate_unavailable: bool = False,
     ) -> CallRecord:
         """Call a vendor to check availability and get ETA + cost estimate."""
         task = (
@@ -283,8 +316,17 @@ class CalleService:
         )
 
         if self.is_dry_run:
-            logger.info(f"[DRY RUN] Simulating vendor dispatch call to {vendor_phone}")
-            return self._parse_call_result(DRY_RUN_VENDOR_RESULT, "vendor_dispatch", vendor_phone)
+            logger.info(f"[DRY RUN] Simulating vendor dispatch call to {vendor_phone} ({vendor_name})")
+            base = DRY_RUN_VENDOR_UNAVAILABLE_RESULT if simulate_unavailable else DRY_RUN_VENDOR_RESULT
+            import copy
+            result_copy = copy.deepcopy(base)
+            # Personalize vendor in transcript if available
+            try:
+                turns = result_copy["recipients"][0]["attempts"][0]["transcript_turns"]
+                turns[0]["text"] = f"Hi, this is SmartRent Maintenance calling {vendor_name} on behalf of {property_name}. We have an urgent {issue_type} issue in Unit {unit_number}. Are you available?"
+            except Exception:
+                pass
+            return self._parse_call_result(result_copy, "vendor_dispatch", vendor_phone)
 
         result = self._make_call(
             phone=vendor_phone,
@@ -317,7 +359,35 @@ class CalleService:
 
         if self.is_dry_run:
             logger.info(f"[DRY RUN] Simulating tenant confirmation call to {phone}")
-            return self._parse_call_result(DRY_RUN_CONFIRM_RESULT, "tenant_confirm", phone)
+            confirm_res = dict(DRY_RUN_CONFIRM_RESULT)
+            confirm_res["recipients"] = [{
+                "structured_result": {"confirmed": "yes", "preferred_time": "", "notes": "Will be home"},
+                "attempts": [{
+                    "transcript_turns": [
+                        {
+                            "offset_seconds": 0,
+                            "speaker": "bot",
+                            "text": f"Hi again, this is SmartRent Maintenance. We've coordinated with {vendor_name}. They can arrive {eta or 'within 2 hours'}, estimated cost {cost_estimate or '$150-250'}. Does that work for you?"
+                        },
+                        {
+                            "offset_seconds": 8,
+                            "speaker": "user",
+                            "text": "Yes, that sounds good. I'll be home."
+                        },
+                        {
+                            "offset_seconds": 12,
+                            "speaker": "bot",
+                            "text": f"Great, I'll confirm the appointment with {vendor_name}. Have a wonderful day!"
+                        },
+                        {
+                            "offset_seconds": 16,
+                            "speaker": "user",
+                            "text": "Thank you so much!"
+                        }
+                    ]
+                }]
+            }]
+            return self._parse_call_result(confirm_res, "tenant_confirm", phone)
 
         result = self._make_call(
             phone=phone,

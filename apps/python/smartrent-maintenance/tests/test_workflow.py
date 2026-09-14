@@ -17,6 +17,7 @@ from app.models import (
     IssueType,
     MaintenanceRequest,
     Urgency,
+    Vendor,
     WorkflowState,
 )
 from app.workflows import MaintenanceWorkflow
@@ -188,5 +189,170 @@ class TestModels:
             tenant_name="John",
             tenant_phone="+15551234567",
             unit_number="4B",
+            simulate_cascade=True,
         )
         assert payload.property_name == "SmartRent Demo Property"
+        assert payload.simulate_cascade is True
+
+
+class TestEnterpriseResilience:
+    """Test enterprise reliability, cascade dispatch, and edge case handling."""
+
+    @pytest.mark.asyncio
+    async def test_vendor_cascade_recovery(self, workflow, sample_request):
+        """Test that when simulate_cascade is active, the first vendor declines and workflow cascades to secondary vendor."""
+        sample_request.simulate_cascade = True
+        sample_request = await workflow.step_tenant_intake(sample_request)
+        result = await workflow.step_vendor_dispatch(sample_request)
+
+        assert result.state == WorkflowState.VENDOR_FOUND
+        assert result.assigned_vendor is not None
+        assert len(result.calls) == 3  # 1 intake + 2 vendor dispatch calls
+        cascade_events = [e for e in result.timeline if e["event"] == "vendor_cascade_triggered"]
+        assert len(cascade_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_all_vendors_unavailable_escalation(self, sample_request):
+        """Test that when all candidates are unavailable, the workflow fails gracefully and escalates."""
+        config = CalleConfig(dry_run=True)
+        service = CalleService(config)
+        single_vendor = [Vendor(id="v-busy", name="Busy Contractor", phone="+15550100099", specialties=["plumbing"])]
+        wf = MaintenanceWorkflow(service, vendors=single_vendor)
+
+        sample_request = await wf.step_tenant_intake(sample_request)
+        sample_request.simulate_cascade = True
+        result = await wf.step_vendor_dispatch(sample_request)
+
+        assert result.state == WorkflowState.FAILED
+        assert any(e["event"] == "escalated_to_manager" for e in result.timeline)
+
+    @pytest.mark.asyncio
+    async def test_tenant_confirm_reschedule(self, workflow, sample_request):
+        """Test that a reschedule response resets the state to TENANT_CALLED."""
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+        from app.models import CallRecord, CallStatus
+
+        sample_request = await workflow.step_tenant_intake(sample_request)
+        sample_request = await workflow.step_vendor_dispatch(sample_request)
+
+        with patch.object(workflow.calle, "call_tenant_confirm") as mock_confirm:
+            mock_confirm.return_value = CallRecord(
+                call_id="mock-reschedule",
+                call_type="tenant_confirm",
+                phone=sample_request.tenant_phone,
+                status=CallStatus.COMPLETED,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                structured_result={"confirmed": "reschedule", "preferred_time": "Friday 2pm"},
+                task_completed=True,
+                confidence_score=0.92,
+            )
+            result = await workflow.step_tenant_confirm(sample_request)
+            assert result.state == WorkflowState.TENANT_CALLED
+            assert result.tenant_confirmed is False
+            assert any(e["event"] == "tenant_reschedule" for e in result.timeline)
+
+    @pytest.mark.asyncio
+    async def test_tenant_confirm_declined(self, workflow, sample_request):
+        """Test handling when tenant declines the vendor visit."""
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+        from app.models import CallRecord, CallStatus
+
+        sample_request = await workflow.step_tenant_intake(sample_request)
+        sample_request = await workflow.step_vendor_dispatch(sample_request)
+
+        with patch.object(workflow.calle, "call_tenant_confirm") as mock_confirm:
+            mock_confirm.return_value = CallRecord(
+                call_id="mock-declined",
+                call_type="tenant_confirm",
+                phone=sample_request.tenant_phone,
+                status=CallStatus.COMPLETED,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                structured_result={"confirmed": "no", "notes": "No longer needed"},
+                task_completed=True,
+                confidence_score=0.95,
+            )
+            result = await workflow.step_tenant_confirm(sample_request)
+            assert result.state == WorkflowState.FAILED
+            assert result.tenant_confirmed is False
+            assert any(e["event"] == "tenant_declined" for e in result.timeline)
+
+    def test_vendor_roster_cascade_coverage(self, workflow):
+        """Verify the vendor roster covers all required property maintenance specialties with fallback redundancy."""
+        for issue in ["plumbing", "electrical", "hvac", "appliance", "structural"]:
+            vendors = workflow.get_vendors_for_issue(issue)
+            assert len(vendors) >= 2, f"Expected at least 2 vendors for {issue} to support cascade"
+
+    @pytest.mark.asyncio
+    async def test_concurrency_independent_requests(self, workflow):
+        """Verify multiple simultaneous requests execute independently without state corruption."""
+        req1 = MaintenanceRequest(tenant_name="Alice", tenant_phone="+15550101001", unit_number="1A")
+        req2 = MaintenanceRequest(tenant_name="Bob", tenant_phone="+15550101002", unit_number="2B")
+
+        res1, res2 = await asyncio.gather(
+            workflow.run_full_workflow(req1),
+            workflow.run_full_workflow(req2),
+        )
+        assert res1.id != res2.id
+        assert res1.state == WorkflowState.COMPLETED
+        assert res2.state == WorkflowState.COMPLETED
+        assert res1.tenant_name == "Alice"
+        assert res2.tenant_name == "Bob"
+
+    def test_confidence_and_evidence_preservation(self):
+        """Ensure evidence quotes and confidence scores remain intact on call records."""
+        config = CalleConfig(dry_run=True)
+        service = CalleService(config)
+        record = service.call_tenant_intake(
+            phone="+15551234567",
+            tenant_name="Test Tenant",
+            unit_number="3C",
+            property_name="Demo",
+        )
+        assert record.confidence_score is not None
+        assert record.confidence_score >= 0.90
+        assert len(record.evidence) >= 1
+
+
+class TestAPIEndpoints:
+    """Test REST API endpoints and payload serialization."""
+
+    def test_dashboard_endpoint(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        with TestClient(app) as client:
+            res = client.get("/api/dashboard")
+            assert res.status_code == 200
+            data = res.json()
+            assert "total_requests" in data
+            assert "requests" in data
+
+    def test_create_and_fetch_request_api(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        with TestClient(app) as client:
+            res = client.post(
+                "/api/requests",
+                json={
+                    "tenant_name": "API Tester",
+                    "tenant_phone": "+15550109999",
+                    "unit_number": "5F",
+                    "initial_description": "Clogged bathroom sink",
+                    "simulate_cascade": True,
+                },
+            )
+            assert res.status_code == 200
+            created = res.json()
+            assert created["id"].startswith("MR-")
+            assert created["tenant_name"] == "API Tester"
+            assert created["simulate_cascade"] is True
+
+            # Fetch details
+            fetch_res = client.get(f"/api/requests/{created['id']}")
+            assert fetch_res.status_code == 200
+            assert fetch_res.json()["id"] == created["id"]
+
+

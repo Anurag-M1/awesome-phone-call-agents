@@ -112,6 +112,7 @@ class MaintenanceRequest(BaseModel):
 
     # Confirmation
     tenant_confirmed: Optional[bool] = None
+    simulate_cascade: bool = False
 
     # Call history
     calls: list[CallRecord] = []
@@ -137,6 +138,7 @@ class CreateRequestPayload(BaseModel):
     unit_number: str
     property_name: str = "SmartRent Demo Property"
     initial_description: str = ""
+    simulate_cascade: bool = False
 
 
 class RequestSummary(BaseModel):

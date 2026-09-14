@@ -30,9 +30,13 @@
                 <span class="mode-dot"></span>
                 <span class="mode-text">DRY RUN</span>
             </div>
-            <button class="btn-demo" id="btnDemo" onclick="runAutoDemo()">
+            <button class="btn-demo" id="btnDemo" onclick="runAutoDemo(false)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-                Run Demo
+                Standard Demo
+            </button>
+            <button class="btn-demo btn-cascade" id="btnCascadeDemo" onclick="runAutoDemo(true)" title="Demonstrates intelligent contractor fallback when primary vendor is busy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Cascade Fallback Demo
             </button>
             <button class="btn-primary" id="btnNewRequest" onclick="showNewRequestModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -208,6 +212,12 @@
                 <div class="form-group">
                     <label for="initialDescription">Issue Description</label>
                     <textarea id="initialDescription" rows="3" placeholder="Kitchen sink is leaking under the cabinet..."></textarea>
+                </div>
+                <div class="form-checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="simulateCascade">
+                        <span>⚡ <strong>Simulate Contractor Busy</strong> (Demonstrates AI Multi-Vendor Cascade)</span>
+                    </label>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-ghost" onclick="hideNewRequestModal()">Cancel</button>

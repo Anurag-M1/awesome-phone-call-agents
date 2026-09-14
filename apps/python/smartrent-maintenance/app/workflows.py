@@ -34,15 +34,33 @@ DEFAULT_VENDORS = [
         specialties=["plumbing"],
     ),
     Vendor(
+        id="v-plumb2",
+        name="Apex Emergency Rooter",
+        phone="+15550100011",
+        specialties=["plumbing"],
+    ),
+    Vendor(
         id="v-elec1",
         name="Spark Electric Co.",
         phone="+15550100002",
         specialties=["electrical"],
     ),
     Vendor(
+        id="v-elec2",
+        name="VoltPro Masters",
+        phone="+15550100012",
+        specialties=["electrical"],
+    ),
+    Vendor(
         id="v-hvac1",
         name="CoolBreeze HVAC",
         phone="+15550100003",
+        specialties=["hvac"],
+    ),
+    Vendor(
+        id="v-hvac2",
+        name="TempMaster Heating & Air",
+        phone="+15550100013",
         specialties=["hvac"],
     ),
     Vendor(
@@ -55,7 +73,7 @@ DEFAULT_VENDORS = [
         id="v-gen2",
         name="AllCraft Maintenance",
         phone="+15550100005",
-        specialties=["plumbing", "electrical", "hvac", "appliance", "structural"],
+        specialties=["plumbing", "electrical", "hvac", "appliance", "structural", "other"],
     ),
 ]
 
@@ -153,10 +171,13 @@ class MaintenanceWorkflow:
             request.add_timeline_event("no_vendors_found", f"No vendors available for {request.issue_type.value}")
             return request
 
-        for vendor in candidates:
-            request.add_timeline_event("vendor_call_started", f"Calling {vendor.name}")
+        for idx, vendor in enumerate(candidates):
+            request.add_timeline_event("vendor_call_started", f"Calling {vendor.name} ({'Primary' if idx == 0 else f'Secondary #{idx}'})")
 
             try:
+                # In cascade simulation mode, the first vendor is simulated as busy
+                should_simulate_unavailable = bool(request.simulate_cascade and idx == 0)
+
                 call_record = self.calle.call_vendor_dispatch(
                     vendor_phone=vendor.phone,
                     vendor_name=vendor.name,
@@ -166,6 +187,7 @@ class MaintenanceWorkflow:
                     property_name=request.property_name,
                     unit_number=request.unit_number,
                     additional_details=request.additional_details or "",
+                    simulate_unavailable=should_simulate_unavailable,
                 )
 
                 request.calls.append(call_record)
@@ -179,22 +201,26 @@ class MaintenanceWorkflow:
                         request.vendor_cost_estimate = result.get("cost_estimate", "TBD")
                         request.state = WorkflowState.VENDOR_FOUND
 
-                        request.add_timeline_event(
-                            "vendor_found",
-                            f"{vendor.name} available — ETA: {request.vendor_eta}, "
+                        found_msg = (
+                            f"Cascade recovery successful! {vendor.name} accepted dispatch — ETA: {request.vendor_eta}, "
                             f"Cost: {request.vendor_cost_estimate}"
+                            if idx > 0 else
+                            f"{vendor.name} available — ETA: {request.vendor_eta}, Cost: {request.vendor_cost_estimate}"
                         )
-                        logger.info(f"[{request.id}] Vendor found: {vendor.name}")
+                        request.add_timeline_event("vendor_found", found_msg)
+                        logger.info(f"[{request.id}] Vendor found: {vendor.name} (attempt {idx + 1})")
                         break
                     else:
+                        decline_reason = result.get("notes") or "Contractor unavailable for same-day dispatch"
                         request.add_timeline_event(
-                            "vendor_unavailable",
-                            f"{vendor.name} is not available"
+                            "vendor_cascade_triggered",
+                            f"{vendor.name} is unavailable ({decline_reason}). Cascading to next candidate on roster..."
                         )
+                        logger.info(f"[{request.id}] {vendor.name} unavailable, cascading to next candidate")
                 else:
                     request.add_timeline_event(
                         "vendor_call_failed",
-                        f"Call to {vendor.name} did not complete successfully"
+                        f"Call to {vendor.name} did not complete successfully. Cascading..."
                     )
 
             except Exception as e:
@@ -203,7 +229,10 @@ class MaintenanceWorkflow:
 
         if request.state != WorkflowState.VENDOR_FOUND:
             request.state = WorkflowState.FAILED
-            request.add_timeline_event("all_vendors_unavailable", "No vendor available for this job")
+            request.add_timeline_event(
+                "escalated_to_manager",
+                "All rostered contractors unavailable. Automatically routed to Property Manager emergency queue."
+            )
 
         return request
 
