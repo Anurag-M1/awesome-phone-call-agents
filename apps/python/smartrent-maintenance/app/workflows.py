@@ -101,7 +101,7 @@ class MaintenanceWorkflow:
         request.add_timeline_event("tenant_call_started", "Calling tenant to gather issue details")
 
         try:
-            call_record = self.calle.call_tenant_intake(
+            call_record = await self.calle.call_tenant_intake(
                 phone=request.tenant_phone,
                 tenant_name=request.tenant_name,
                 unit_number=request.unit_number,
@@ -178,7 +178,7 @@ class MaintenanceWorkflow:
                 # In cascade simulation mode, the first vendor is simulated as busy
                 should_simulate_unavailable = bool(request.simulate_cascade and idx == 0)
 
-                call_record = self.calle.call_vendor_dispatch(
+                call_record = await self.calle.call_vendor_dispatch(
                     vendor_phone=vendor.phone,
                     vendor_name=vendor.name,
                     issue_type=request.issue_type.value,
@@ -251,7 +251,7 @@ class MaintenanceWorkflow:
         )
 
         try:
-            call_record = self.calle.call_tenant_confirm(
+            call_record = await self.calle.call_tenant_confirm(
                 phone=request.tenant_phone,
                 tenant_name=request.tenant_name,
                 vendor_name=request.assigned_vendor.name,

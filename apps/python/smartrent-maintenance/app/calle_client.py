@@ -6,6 +6,8 @@ vendor dispatch calls, and tenant confirmation calls.
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import json
 import logging
 import os
@@ -188,7 +190,7 @@ class CalleService:
     def is_dry_run(self) -> bool:
         return self.config.dry_run or self._client is None
 
-    def _make_call(
+    async def _make_call(
         self,
         phone: str,
         task: str,
@@ -197,7 +199,7 @@ class CalleService:
         locale: str = "en-US",
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Place a call via CALL-E SDK and wait for result."""
+        """Place a call via CALL-E SDK and wait for result without blocking the event loop."""
         if self.is_dry_run:
             raise RuntimeError("Cannot make live call in dry-run mode")
 
@@ -218,7 +220,9 @@ class CalleService:
             call_params["idempotency_key"] = idempotency_key
 
         logger.info(f"Placing CALL-E call to {phone[:7]}***")
-        result = self._client.calls.create_and_wait(**call_params)
+        # Use asyncio.to_thread so that synchronous blocking polling inside the CALL-E SDK
+        # does not freeze FastAPI's main event loop during live phone calls.
+        result = await asyncio.to_thread(self._client.calls.create_and_wait, **call_params)
         logger.info(f"Call completed: status={result.get('status')}, task_completed={result.get('task_completed')}")
         return result
 
@@ -245,11 +249,12 @@ class CalleService:
             task_completed=result.get("task_completed"),
             confidence_score=confidence.get("score"),
             confidence_label=confidence.get("label"),
+            recording_url=result.get("recording_url") or result.get("audio_url"),
         )
 
     # ─── Tenant Intake Call ───────────────────────────────────────────────
 
-    def call_tenant_intake(
+    async def call_tenant_intake(
         self,
         phone: str,
         tenant_name: str,
@@ -278,7 +283,7 @@ class CalleService:
             logger.info(f"[DRY RUN] Simulating tenant intake call to {phone}")
             return self._parse_call_result(DRY_RUN_TENANT_RESULT, "tenant_intake", phone)
 
-        result = self._make_call(
+        result = await self._make_call(
             phone=phone,
             task=task,
             result_schema=TENANT_INTAKE_RESULT_SCHEMA,
@@ -288,7 +293,7 @@ class CalleService:
 
     # ─── Vendor Dispatch Call ─────────────────────────────────────────────
 
-    def call_vendor_dispatch(
+    async def call_vendor_dispatch(
         self,
         vendor_phone: str,
         vendor_name: str,
@@ -318,7 +323,6 @@ class CalleService:
         if self.is_dry_run:
             logger.info(f"[DRY RUN] Simulating vendor dispatch call to {vendor_phone} ({vendor_name})")
             base = DRY_RUN_VENDOR_UNAVAILABLE_RESULT if simulate_unavailable else DRY_RUN_VENDOR_RESULT
-            import copy
             result_copy = copy.deepcopy(base)
             # Personalize vendor in transcript if available
             try:
@@ -328,7 +332,7 @@ class CalleService:
                 pass
             return self._parse_call_result(result_copy, "vendor_dispatch", vendor_phone)
 
-        result = self._make_call(
+        result = await self._make_call(
             phone=vendor_phone,
             task=task,
             result_schema=VENDOR_DISPATCH_RESULT_SCHEMA,
@@ -338,7 +342,7 @@ class CalleService:
 
     # ─── Tenant Confirmation Call ─────────────────────────────────────────
 
-    def call_tenant_confirm(
+    async def call_tenant_confirm(
         self,
         phone: str,
         tenant_name: str,
@@ -389,7 +393,7 @@ class CalleService:
             }]
             return self._parse_call_result(confirm_res, "tenant_confirm", phone)
 
-        result = self._make_call(
+        result = await self._make_call(
             phone=phone,
             task=task,
             result_schema=TENANT_CONFIRM_RESULT_SCHEMA,

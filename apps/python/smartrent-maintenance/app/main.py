@@ -19,7 +19,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.calle_client import CalleService
 from app.config import get_config
+from app.db import init_db, list_requests as db_list_requests, save_request
 from app.models import (
+    CallStatus,
     CreateRequestPayload,
     DashboardData,
     MaintenanceRequest,
@@ -50,6 +52,12 @@ async def lifespan(app: FastAPI):
     app.state.config = config
     app.state.calle_service = CalleService(config.calle)
     app.state.workflow = MaintenanceWorkflow(app.state.calle_service)
+
+    # Initialize SQLite database and restore any previously saved requests
+    init_db()
+    for persisted_req in db_list_requests():
+        requests_store[persisted_req.id] = persisted_req
+    logger.info(f"Loaded {len(requests_store)} maintenance requests from SQLite persistence")
 
     mode = "DRY-RUN" if config.calle.dry_run else "LIVE"
     logger.info(f"SmartRent Maintenance Coordinator started in {mode} mode")
@@ -112,6 +120,7 @@ async def create_request(payload: CreateRequestPayload, background_tasks: Backgr
     )
     req.add_timeline_event("request_created", f"Maintenance request created for Unit {req.unit_number}")
     requests_store[req.id] = req
+    save_request(req)
 
     logger.info(f"Created maintenance request {req.id} for {req.tenant_name} (Unit {req.unit_number})")
 
@@ -206,11 +215,51 @@ async def get_dashboard_data():
 
 @app.post("/api/webhook/calle")
 async def calle_webhook(request: Request):
-    """Handle CALL-E webhook events."""
-    body = await request.json()
-    logger.info(f"CALL-E webhook received: {body.get('event_type', 'unknown')}")
-    # In production, match call_id to request and update status
-    return {"status": "ok"}
+    """Handle CALL-E webhook events and update matching call records."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_type = body.get("event_type") or body.get("type", "call_updated")
+    call_id = body.get("call_id") or body.get("id")
+    status = body.get("status")
+
+    logger.info(f"CALL-E webhook received: event={event_type}, call_id={call_id}, status={status}")
+
+    if not call_id:
+        return {"status": "ignored", "reason": "No call_id provided"}
+
+    matched_req = None
+    for req in list(requests_store.values()):
+        for call in req.calls:
+            if call.call_id == call_id:
+                matched_req = req
+                if status:
+                    try:
+                        call.status = CallStatus(status)
+                    except ValueError:
+                        pass
+                if "structured_result" in body:
+                    call.structured_result = body["structured_result"]
+                if "evidence" in body:
+                    call.evidence = body["evidence"]
+                if "recording_url" in body:
+                    call.recording_url = body["recording_url"]
+                elif "audio_url" in body:
+                    call.recording_url = body["audio_url"]
+                req.add_timeline_event(
+                    "webhook_update",
+                    f"CALL-E webhook callback: Call {call_id} updated to {status or 'completed'}"
+                )
+                save_request(req)
+                break
+        if matched_req:
+            break
+
+    if matched_req:
+        return {"status": "processed", "request_id": matched_req.id, "call_id": call_id}
+    return {"status": "ok", "message": "No matching local request for call_id"}
 
 
 @app.get("/api/config")
@@ -237,6 +286,7 @@ async def run_workflow_background(request_id: str):
     await asyncio.sleep(1)
     req = await workflow.step_tenant_intake(req)
     requests_store[request_id] = req
+    save_request(req)
 
     if req.state == WorkflowState.FAILED:
         return
@@ -244,6 +294,7 @@ async def run_workflow_background(request_id: str):
     await asyncio.sleep(1)
     req = await workflow.step_vendor_dispatch(req)
     requests_store[request_id] = req
+    save_request(req)
 
     if req.state == WorkflowState.FAILED:
         return
@@ -251,12 +302,14 @@ async def run_workflow_background(request_id: str):
     await asyncio.sleep(1)
     req = await workflow.step_tenant_confirm(req)
     requests_store[request_id] = req
+    save_request(req)
 
 
 async def run_step(step_fn, req: MaintenanceRequest):
     """Run a single workflow step."""
     result = await step_fn(req)
     requests_store[result.id] = result
+    save_request(result)
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────

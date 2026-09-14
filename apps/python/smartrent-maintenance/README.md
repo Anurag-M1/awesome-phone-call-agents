@@ -144,22 +144,23 @@ DRY_RUN=false python -m app.main
 ```
 smartrent-maintenance/
 ├── app/
-│   ├── main.py              # FastAPI application
-│   ├── calle_client.py      # CALL-E SDK wrapper (3 call types)
+│   ├── main.py              # FastAPI application & webhook handler
+│   ├── calle_client.py      # CALL-E SDK async client (3 call types)
 │   ├── models.py            # Pydantic models + result schemas
-│   ├── workflows.py         # 3-call workflow orchestrator
+│   ├── workflows.py         # 3-call workflow orchestrator & vendor cascade
+│   ├── db.py                # Zero-dependency SQLite persistence layer
 │   └── config.py            # Configuration
 ├── frontend/
-│   ├── index.html           # Dashboard SPA
-│   ├── style.css            # Premium dark-mode UI
-│   └── app.js               # Dashboard logic
+│   ├── index.html           # Enterprise dashboard SPA
+│   ├── style.css            # Premium enterprise SaaS design system (editorial light mode)
+│   └── app.js               # Dashboard logic & telemetry deck
 ├── skill/
 │   └── smartrent-maintenance/
 │       ├── SKILL.md          # Agent Skill definition
-│       ├── references/       # Workflow documentation
-│       └── scripts/          # Dry-run demo
+│       ├── references/       # Workflow, safety, and example documentation
+│       └── scripts/          # Dry-run CLI demo
 ├── tests/
-│   └── test_workflow.py     # Full test suite
+│   └── test_workflow.py     # Comprehensive test suite (async, resilience, API)
 ├── requirements.txt
 └── .env.example
 ```

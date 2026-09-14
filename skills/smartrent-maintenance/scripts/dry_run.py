@@ -9,9 +9,20 @@ import asyncio
 import json
 import sys
 import os
+from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Add project/app root to path
+current = Path(__file__).resolve()
+candidate_roots = [
+    current.parents[3] / "apps" / "python" / "smartrent-maintenance",  # Monorepo layout
+    current.parents[3],  # Standalone layout
+    current.parents[2],
+]
+for candidate in candidate_roots:
+    if (candidate / "app").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
 
 from app.config import CalleConfig
 from app.calle_client import CalleService

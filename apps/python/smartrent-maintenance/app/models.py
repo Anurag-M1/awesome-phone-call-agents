@@ -75,6 +75,7 @@ class CallRecord(BaseModel):
     task_completed: Optional[bool] = None
     confidence_score: Optional[float] = None
     confidence_label: Optional[str] = None
+    recording_url: Optional[str] = None
     error: Optional[str] = None
 
 

@@ -74,11 +74,11 @@ class TelephonyWaveformVisualizer {
 
             const grad = this.ctx.createLinearGradient(0, y, 0, y + barH);
             if (this.active) {
-                grad.addColorStop(0, '#38BDF8');
-                grad.addColorStop(1, '#0284C7');
+                grad.addColorStop(0, '#3157D5');
+                grad.addColorStop(1, '#2A4BC0');
             } else {
-                grad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
-                grad.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
+                grad.addColorStop(0, 'rgba(0, 0, 0, 0.08)');
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
             }
 
             this.ctx.fillStyle = grad;
@@ -100,10 +100,18 @@ let waveformVisualizer = null;
 let isPlayingAudio = false;
 let currentSpeechIndex = 0;
 let playbackRate = 1.0;
+let currentNativeAudio = null;
 
 function stopCallAudio() {
     if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
+    }
+    if (currentNativeAudio) {
+        try {
+            currentNativeAudio.pause();
+            currentNativeAudio.currentTime = 0;
+        } catch (e) {}
+        currentNativeAudio = null;
     }
     isPlayingAudio = false;
     if (waveformVisualizer) waveformVisualizer.setActive(false);
@@ -128,6 +136,39 @@ function togglePlayCurrentCall() {
     }
 
     const activeCall = currentDetailData.calls[currentCallStepIndex] || currentDetailData.calls[0];
+
+    // Stream native telephony audio if recording/audio URL is provided
+    const nativeAudioUrl = activeCall.recording_url || activeCall.audio_url;
+    if (nativeAudioUrl) {
+        isPlayingAudio = true;
+        if (waveformVisualizer) waveformVisualizer.setActive(true);
+        const btn = document.getElementById('btnPlayCall');
+        if (btn) {
+            btn.classList.add('playing');
+            btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> <span>Stop Audio</span>`;
+        }
+        currentNativeAudio = new Audio(nativeAudioUrl);
+        currentNativeAudio.playbackRate = playbackRate;
+        currentNativeAudio.onended = () => {
+            stopCallAudio();
+        };
+        currentNativeAudio.onerror = () => {
+            console.warn('Native audio stream unreachable, falling back to speech synthesis preview');
+            stopCallAudio();
+            playTranscriptSynthesis(activeCall);
+        };
+        currentNativeAudio.play().catch(e => {
+            console.warn('Native audio play error:', e);
+            stopCallAudio();
+            playTranscriptSynthesis(activeCall);
+        });
+        return;
+    }
+
+    playTranscriptSynthesis(activeCall);
+}
+
+function playTranscriptSynthesis(activeCall) {
     if (!activeCall.transcript || activeCall.transcript.length === 0) {
         showToast('Transcript not populated for this call');
         return;
@@ -192,6 +233,9 @@ function togglePlayCurrentCall() {
 
 function setPlaybackSpeed(rate, el) {
     playbackRate = parseFloat(rate);
+    if (currentNativeAudio) {
+        try { currentNativeAudio.playbackRate = playbackRate; } catch (e) {}
+    }
     document.querySelectorAll('.speed-chip').forEach(c => c.classList.remove('active'));
     if (el) el.classList.add('active');
     showToast(`Speed set to ${rate}x`);
@@ -523,7 +567,13 @@ function renderTelephonyTab(req, calls, activeCall) {
                         </div>
                     </div>
                 </div>
-                <span class="deck-call-status-pill">${currentCall.status === 'completed' ? '200 OK &middot; COMPLETED' : 'CALLING...'}</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                    ${(currentCall.recording_url || currentCall.audio_url)
+                        ? '<span class="telephony-preview-tag live-rec" title="Direct audio stream from CALL-E telephony server"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> LIVE AUDIO</span>'
+                        : '<span class="telephony-preview-tag" title="Synthesized turn-by-turn speech preview for audit inspection"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg> SPEECH SYNTHESIS PREVIEW</span>'
+                    }
+                    <span class="deck-call-status-pill">${currentCall.status === 'completed' ? '200 OK &middot; COMPLETED' : 'CALLING...'}</span>
+                </div>
             </div>
 
             <!-- Live Canvas Audio Waveform -->
@@ -877,11 +927,11 @@ function simulateTenantSMS() {
     document.getElementById('extraModalTag').textContent = 'RESIDENT SMS DISPATCH';
     document.getElementById('extraModalTitle').textContent = `Simulated Tenant Notification`;
     document.getElementById('extraModalBody').innerHTML = `
-        <div style="background:#020617;border:1px solid var(--hairline);border-radius:16px;padding:20px;max-width:380px;margin:0 auto">
+        <div style="background:var(--bg-surface-1);border:1px solid var(--hairline);border-radius:16px;padding:20px;max-width:380px;margin:0 auto">
             <div style="font-size:10px;font-family:var(--font-mono);color:var(--text-tertiary);margin-bottom:8px;text-align:center">
                 MESSAGES &middot; TODAY ${new Date().toLocaleTimeString()}
             </div>
-            <div style="background:#1E293B;padding:12px 14px;border-radius:14px;color:var(--text-primary);font-size:12px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+            <div style="background:var(--bg-surface-0);padding:12px 14px;border-radius:14px;color:var(--text-primary);font-size:12px;line-height:1.5;box-shadow:var(--shadow-card)">
                 <strong>SmartRent Notification:</strong> Hi ${currentDetailData.tenant_name}, as confirmed on our phone call, <strong>${vendor}</strong> has been scheduled for Unit ${currentDetailData.unit_number}.
                 <br><br>
                 Arrival window: <strong>${eta}</strong>.

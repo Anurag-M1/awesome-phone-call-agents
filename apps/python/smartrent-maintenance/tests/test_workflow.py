@@ -56,8 +56,9 @@ class TestCalleService:
     def test_dry_run_mode(self, dry_run_service):
         assert dry_run_service.is_dry_run is True
 
-    def test_tenant_intake_dry_run(self, dry_run_service):
-        result = dry_run_service.call_tenant_intake(
+    @pytest.mark.asyncio
+    async def test_tenant_intake_dry_run(self, dry_run_service):
+        result = await dry_run_service.call_tenant_intake(
             phone="+15551234567",
             tenant_name="John Smith",
             unit_number="4B",
@@ -72,8 +73,9 @@ class TestCalleService:
         assert len(result.transcript) > 0
         assert len(result.evidence) > 0
 
-    def test_vendor_dispatch_dry_run(self, dry_run_service):
-        result = dry_run_service.call_vendor_dispatch(
+    @pytest.mark.asyncio
+    async def test_vendor_dispatch_dry_run(self, dry_run_service):
+        result = await dry_run_service.call_vendor_dispatch(
             vendor_phone="+15550100001",
             vendor_name="Mike's Plumbing",
             issue_type="plumbing",
@@ -87,8 +89,9 @@ class TestCalleService:
         assert result.structured_result["eta"] is not None
         assert result.structured_result["cost_estimate"] is not None
 
-    def test_tenant_confirm_dry_run(self, dry_run_service):
-        result = dry_run_service.call_tenant_confirm(
+    @pytest.mark.asyncio
+    async def test_tenant_confirm_dry_run(self, dry_run_service):
+        result = await dry_run_service.call_tenant_confirm(
             phone="+15551234567",
             tenant_name="John Smith",
             vendor_name="Mike's Plumbing",
@@ -302,11 +305,12 @@ class TestEnterpriseResilience:
         assert res1.tenant_name == "Alice"
         assert res2.tenant_name == "Bob"
 
-    def test_confidence_and_evidence_preservation(self):
+    @pytest.mark.asyncio
+    async def test_confidence_and_evidence_preservation(self):
         """Ensure evidence quotes and confidence scores remain intact on call records."""
         config = CalleConfig(dry_run=True)
         service = CalleService(config)
-        record = service.call_tenant_intake(
+        record = await service.call_tenant_intake(
             phone="+15551234567",
             tenant_name="Test Tenant",
             unit_number="3C",
@@ -354,5 +358,69 @@ class TestAPIEndpoints:
             fetch_res = client.get(f"/api/requests/{created['id']}")
             assert fetch_res.status_code == 200
             assert fetch_res.json()["id"] == created["id"]
+
+    def test_sqlite_persistence(self, tmp_path):
+        from app.db import init_db, save_request, get_request, list_requests
+        from app.models import MaintenanceRequest
+        test_db = tmp_path / "test_smartrent.db"
+        init_db(test_db)
+
+        req = MaintenanceRequest(
+            tenant_name="Persisted User",
+            tenant_phone="+15550109876",
+            unit_number="8B",
+            initial_description="Testing SQLite storage",
+        )
+        save_request(req, test_db)
+
+        loaded = get_request(req.id, test_db)
+        assert loaded is not None
+        assert loaded.id == req.id
+        assert loaded.tenant_name == "Persisted User"
+
+        all_reqs = list_requests(test_db)
+        assert len(all_reqs) >= 1
+        assert any(r.id == req.id for r in all_reqs)
+
+    def test_webhook_matching(self):
+        import uuid
+        from fastapi.testclient import TestClient
+        from app.main import app, requests_store
+        from app.models import MaintenanceRequest, CallRecord, CallStatus
+
+        unique_call_id = f"call-wh-{uuid.uuid4().hex[:8]}"
+        req = MaintenanceRequest(
+            tenant_name="Webhook User",
+            tenant_phone="+15550105555",
+            unit_number="2A",
+        )
+        call = CallRecord(
+            call_id=unique_call_id,
+            call_type="tenant_intake",
+            phone="+15550105555",
+            status=CallStatus.IN_PROGRESS,
+        )
+        req.calls.append(call)
+
+        with TestClient(app) as client:
+            requests_store[req.id] = req
+            wh_res = client.post(
+                "/api/webhook/calle",
+                json={
+                    "event_type": "call.completed",
+                    "call_id": unique_call_id,
+                    "status": "completed",
+                    "structured_result": {"issue_type": "plumbing", "urgency": "urgent"},
+                },
+            )
+            assert wh_res.status_code == 200
+            assert wh_res.json()["status"] == "processed"
+            assert wh_res.json()["request_id"] == req.id
+
+            # Verify call record was updated
+            updated_req = requests_store[req.id]
+            assert updated_req.calls[0].status == CallStatus.COMPLETED
+            assert updated_req.calls[0].structured_result["issue_type"] == "plumbing"
+
 
 
