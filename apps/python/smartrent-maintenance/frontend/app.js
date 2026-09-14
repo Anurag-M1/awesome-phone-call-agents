@@ -34,9 +34,15 @@ class TelephonyWaveformVisualizer {
     resize() {
         if (!this.canvas) return;
         const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = rect.width * (window.devicePixelRatio || 1);
-        this.canvas.height = rect.height * (window.devicePixelRatio || 1);
-        this.ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+        if (rect.width === 0) return;
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.bars = Math.max(16, Math.min(36, Math.floor(rect.width / 10)));
+        if (this.heights.length !== this.bars) {
+            this.heights = new Array(this.bars).fill(4);
+        }
     }
 
     setActive(isActive) {
@@ -349,6 +355,9 @@ function renderQueue(requests) {
         return;
     }
 
+    const mobileBadge = document.getElementById('mobileTabQueueCount');
+    if (mobileBadge) mobileBadge.textContent = requests.length;
+
     list.innerHTML = filtered.map(req => {
         const isSel = req.id === selectedId;
         const urgencyClass = req.urgency === 'emergency' ? 'tag-emergency' : req.urgency === 'urgent' ? 'tag-urgent' : 'tag-routine';
@@ -379,11 +388,36 @@ function renderQueue(requests) {
 // 5. DETAIL CONSOLE & TABS
 // ═══════════════════════════════════════════════════════════════════════════
 
+let currentMobileView = 'queue';
+
+function setMobileView(view) {
+    currentMobileView = view;
+    const body = document.querySelector('.console-body');
+    const tabQ = document.getElementById('btnTabQueue');
+    const tabI = document.getElementById('btnTabIncident');
+    if (!body) return;
+    if (view === 'incident') {
+        body.classList.add('show-incident');
+        body.classList.remove('show-queue');
+        if (tabQ) tabQ.classList.remove('active');
+        if (tabI) tabI.classList.add('active');
+    } else {
+        body.classList.add('show-queue');
+        body.classList.remove('show-incident');
+        if (tabQ) tabQ.classList.add('active');
+        if (tabI) tabI.classList.remove('active');
+    }
+}
+
 async function selectRequest(id) {
-    if (selectedId === id && currentDetailData) return;
+    if (selectedId === id && currentDetailData) {
+        if (window.innerWidth <= 900) setMobileView('incident');
+        return;
+    }
     selectedId = id;
     currentCallStepIndex = 0;
     stopCallAudio();
+    if (window.innerWidth <= 900) setMobileView('incident');
     await refreshDetail(id);
     await refreshData();
 }
@@ -461,6 +495,14 @@ function renderDetailConsole(req) {
 
     panel.innerHTML = `
     <div class="incident-workspace">
+        <!-- Mobile Back to Queue Navigation -->
+        <div class="mobile-back-row">
+            <button class="btn-mobile-back" onclick="setMobileView('queue')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                <span>&larr; Back to Dispatch Queue</span>
+            </button>
+        </div>
+
         <!-- Command Header -->
         <div class="incident-command-bar">
             <div>
