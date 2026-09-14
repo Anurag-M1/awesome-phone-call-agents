@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartRent — AI Maintenance Coordinator</title>
+    <meta name="description" content="AI-powered property maintenance coordination using CALL-E phone calls">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <!-- Particle Canvas Background -->
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- ─── Top Bar ─────────────────────────────────────────────── -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="logo">
+                <div class="logo-icon-wrap">
+                    <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-4a2 2 0 0 1 2-2h4"/><path d="M3 11V3h18v8"/><path d="M3 11l9 4 9-4"/><path d="M3 11v8l9 4 9-4v-8"/></svg>
+                </div>
+                <span class="logo-text">SmartRent</span>
+                <span class="logo-badge">AI</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="mode-badge" id="modeBadge">
+                <span class="mode-dot"></span>
+                <span class="mode-text">DRY RUN</span>
+            </div>
+            <button class="btn-demo" id="btnDemo" onclick="runAutoDemo()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                Run Demo
+            </button>
+            <button class="btn-primary" id="btnNewRequest" onclick="showNewRequestModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Request
+            </button>
+        </div>
+    </header>
+
+    <!-- ─── Workflow Pipeline Hero ──────────────────────────────── -->
+    <section class="pipeline-hero">
+        <div class="pipeline-container">
+            <div class="pipeline-step" id="pipeStep1" data-step="1">
+                <div class="pipeline-node">
+                    <div class="pipeline-ring"></div>
+                    <div class="pipeline-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </div>
+                    <div class="pipeline-wave" id="wave1"></div>
+                </div>
+                <div class="pipeline-label">Call Tenant</div>
+                <div class="pipeline-sublabel">Gather issue details</div>
+            </div>
+
+            <div class="pipeline-connector" id="pipeConn1">
+                <div class="connector-line"></div>
+                <div class="connector-dot"></div>
+            </div>
+
+            <div class="pipeline-step" id="pipeStep2" data-step="2">
+                <div class="pipeline-node">
+                    <div class="pipeline-ring"></div>
+                    <div class="pipeline-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                    </div>
+                    <div class="pipeline-wave" id="wave2"></div>
+                </div>
+                <div class="pipeline-label">Find Vendor</div>
+                <div class="pipeline-sublabel">Match & dispatch</div>
+            </div>
+
+            <div class="pipeline-connector" id="pipeConn2">
+                <div class="connector-line"></div>
+                <div class="connector-dot"></div>
+            </div>
+
+            <div class="pipeline-step" id="pipeStep3" data-step="3">
+                <div class="pipeline-node">
+                    <div class="pipeline-ring"></div>
+                    <div class="pipeline-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <div class="pipeline-wave" id="wave3"></div>
+                </div>
+                <div class="pipeline-label">Confirm Booking</div>
+                <div class="pipeline-sublabel">Tenant approval</div>
+            </div>
+        </div>
+        <div class="pipeline-status" id="pipelineStatus">
+            <span class="pipeline-status-dot"></span>
+            Ready — Click <strong>"Run Demo"</strong> or create a new request
+        </div>
+    </section>
+
+    <!-- ─── Stats Bar ───────────────────────────────────────────── -->
+    <section class="stats-bar">
+        <div class="stat-card" id="statCardTotal">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div class="stat-info">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Requests</div>
+            </div>
+        </div>
+        <div class="stat-card stat-active" id="statCardActive">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="stat-info">
+                <div class="stat-value" id="statActive">0</div>
+                <div class="stat-label">Active</div>
+            </div>
+        </div>
+        <div class="stat-card stat-completed" id="statCardCompleted">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div class="stat-info">
+                <div class="stat-value" id="statCompleted">0</div>
+                <div class="stat-label">Completed</div>
+            </div>
+        </div>
+        <div class="stat-card stat-calls" id="statCardCalls">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"/></svg>
+            </div>
+            <div class="stat-info">
+                <div class="stat-value" id="statCalls">0</div>
+                <div class="stat-label">AI Calls</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Main Content ────────────────────────────────────────── -->
+    <main class="main-content">
+        <!-- Left: Request List -->
+        <section class="requests-panel">
+            <div class="panel-header">
+                <h2>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    Requests
+                </h2>
+            </div>
+            <div class="requests-list" id="requestsList">
+                <div class="empty-state">
+                    <div class="empty-icon-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </div>
+                    <p class="empty-title">No requests yet</p>
+                    <p class="empty-hint">Click <strong>"Run Demo"</strong> to see the AI workflow</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right: Detail Panel -->
+        <section class="detail-panel" id="detailPanel">
+            <div class="detail-empty">
+                <div class="detail-orbit">
+                    <div class="orbit-ring"></div>
+                    <div class="orbit-ring r2"></div>
+                    <div class="orbit-ring r3"></div>
+                    <div class="orbit-core">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/><circle cx="12" cy="15" r="1"/></svg>
+                    </div>
+                </div>
+                <h3>Select a request</h3>
+                <p>View the full AI workflow, call transcripts, and extracted insights</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- ─── New Request Modal ────────────────────────────────────── -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideNewRequestModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New Maintenance Request
+                </h2>
+                <button class="modal-close" onclick="hideNewRequestModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="newRequestForm" onsubmit="submitNewRequest(event)">
+                <div class="form-group">
+                    <label for="tenantName">Tenant Name</label>
+                    <input type="text" id="tenantName" placeholder="John Smith" required>
+                </div>
+                <div class="form-group">
+                    <label for="tenantPhone">Phone Number (E.164)</label>
+                    <input type="tel" id="tenantPhone" placeholder="+15551234567" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="unitNumber">Unit Number</label>
+                        <input type="text" id="unitNumber" placeholder="4B" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="propertyName">Property</label>
+                        <input type="text" id="propertyName" value="SmartRent Demo Property">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="initialDescription">Issue Description</label>
+                    <textarea id="initialDescription" rows="3" placeholder="Kitchen sink is leaking under the cabinet..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-ghost" onclick="hideNewRequestModal()">Cancel</button>
+                    <button type="submit" class="btn-primary btn-glow" id="btnSubmit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"/></svg>
+                        Create & Start Calls
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ─── Toast ────────────────────────────────────────────────── -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
