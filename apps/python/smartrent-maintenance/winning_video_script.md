@@ -33,19 +33,19 @@
 ---
 
 ### 0:30 – 1:15 | Act 1: The Closed Loop in Action (Standard Demo)
-**Visual**: Screen shares `http://localhost:8000`. Click the **Standard Demo** button. Show the 3-step pipeline node light up (`Tenant Intake` &rarr; `Vendor Dispatch` &rarr; `Tenant Confirm`).
+**Visual**: Screen shares `http://localhost:8000`. Click the **Standard Demo** button. Show the tactical sequence rail light up (`01 Diagnostic Intake` &rarr; `02 Contractor Dispatch` &rarr; `03 Resident SLA Confirmation`), and the KPI row reflect real-time metrics.
 
 > **Speaker**:  
-> "Let's watch SmartRent handle an urgent request for Sarah Chen in Unit 4B. With one click, SmartRent launches a 3-call autonomous pipeline.  
+> "Let's watch SmartRent handle an urgent request for Sarah Chen in Unit 4B at Sunset Heights. With one click, SmartRent launches a 3-call autonomous pipeline.  
 > 
-> In **Call 1**, SmartRent calls Sarah. Using CALL-E's structured schema, our agent asks targeted diagnostic questions: 'Where is the leak? Is water pooling? Can we access with door code 4521?'  
+> In **Call 1**, SmartRent dials Sarah via CALL-E. Using CALL-E's structured schema, our agent asks targeted diagnostic questions: 'Where is the leak? Is water pooling? Can we access with door code 4521?'  
 > 
 > CALL-E returns structured JSON: Issue is *plumbing*, urgency is *urgent*, location is *kitchen sink*.  
 > 
-> Look at the detail view: SmartRent captures the exact transcript, the confidence score ring at 94%, and **verifiable evidence quotes** extracted directly from Sarah's words.  
+> Look at the **Telephony Console**: SmartRent captures the exact transcript, the confidence score at 94%, and **verifiable evidence quotes** extracted directly from Sarah's words.  
 > 
-> And listen to this — our dashboard features live speech synthesis:  
-> *(Click the **'Listen'** button on Call 1 — let 2 bubbles speak aloud while glowing in blue/cyan)*  
+> And listen to this — our console features an interactive audio deck with live spectrum waveform analysis:  
+> *(Click the **'Play Call Audio'** button — watch the canvas frequency bars dance while speech bubbles glow in cyan/emerald)*  
 > 
 > 'Hi Sarah, this is SmartRent Maintenance... We have your request regarding the kitchen sink.'  
 > 'Yes, it's leaking under the cabinet, water is dripping fast.'  
@@ -55,7 +55,7 @@
 ---
 
 ### 1:15 – 2:00 | Act 2: Enterprise Resilience — The Multi-Vendor Cascade
-**Visual**: Click the orange **Cascade Fallback Demo** button.
+**Visual**: Click the amber **Cascade Fallback Demo** button.
 
 > **Speaker**:  
 > "Now, here is what separates a student hackathon demo from an enterprise production solution: **Real life doesn't always go smoothly.**  
@@ -70,7 +70,21 @@
 > 
 > SmartRent calls Apex, secures an arrival window within 2 hours at $150-250, and instantly initiates **Call 3** back to Marcus in Unit 12C to confirm the appointment.  
 > 
-> Notice the event timeline: complete audit trail, vendor cascade recovery, tenant confirmation, and ticket resolved — all in under 60 seconds."
+> Check out the **Audit Trail Tab**: complete chronological audit trail, vendor cascade recovery, tenant confirmation, and ticket resolved — all in under 60 seconds.  
+> *(Click **'Tenant SMS'** in the action bar to reveal the simulated SMS notification sent to Marcus's phone)*"
+
+---
+
+### 2:00 – 2:35 | Act 3: Deep CALL-E Engineering & Architecture
+**Visual**: Switch to Tab 2: **CALL-E Platform Inspector**. Show the live JSON result schemas, confidence score models, and evidence arrays.
+
+> **Speaker**:  
+> "Under the hood, SmartRent is built on deep integration with CALL-E's core platform capabilities:  
+> 
+> 1. **Typed JSON Result Schemas**: As you can see right here in our Platform Inspector tab, we enforce rigorous schemas across intake, dispatch, and confirmation calls.  
+> 2. **Transcript Evidence Verification**: We don't guess — every single field is corroborated against CALL-E's `evidence` array and calibrated confidence scores.  
+> 3. **Cryptographic Idempotency**: Every phone call carries a unique `idempotency_key` ensuring zero duplicate calls or double-charges during network retries.  
+> 4. **Safety Boundaries & Human-in-the-Loop**: We operate consent-gated roster calls only — no cold spam, full transcript transparency, and instant human escalation via the 'Escalate' toolbar button."
 
 ---
 
